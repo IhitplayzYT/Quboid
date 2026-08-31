@@ -12,3 +12,5 @@ mysql = { version = "27", features = ["chrono"] }
 chrono = { version = "0.4", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+rand = "0.10.2"
+regex = "1"

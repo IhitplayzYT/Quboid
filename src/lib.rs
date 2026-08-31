@@ -1,4 +1,4 @@
-use crate::helper::Helper::CLI;
+use crate::{helper::Helper::CLI, model::cache::cache::CacheConnector};
 
 mod helper;
 mod model;
@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 
 use uuid::Uuid;
 
-use crate::model::{dbs::dbs::DataBase, misc::misc::{CacheConnector, MetaData, TaskCruncher}, ob_store::ob_store::DataLake};
+use crate::model::{dbs::dbs::DataBase, misc::misc::{MetaData, TaskCruncher}, ob_store::ob_store::DataLake};
 
 
     pub struct Qube{
