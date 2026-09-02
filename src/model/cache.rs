@@ -13,7 +13,7 @@ pub trait CacheConnector: Send + Sync{
    async fn update(&self,k:String,v:Option<String>,ttl:Option<usize>);
 }
 
-struct Rustis_Connector{
+pub struct Rustis_Connector{
     base_url: String,
     client: Client
 }

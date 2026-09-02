@@ -11,12 +11,23 @@ use crate::model::misc::misc::{Token, build_extraction_regex, extract_row, gener
     }
 
     impl DataBase{
-        fn new(url: &str) -> mysql::Result<Self>{
+        pub fn new(url: &str) -> mysql::Result<Self>{
             Ok(Self { pool:Pool::new(url)? })
         }
 
-        fn conn(&self) -> mysql::Result<PooledConn>{
+        pub fn conn(&self) -> mysql::Result<PooledConn>{
             self.pool.get_conn()
+        }
+
+
+        pub fn exec(&self,str: &str) -> mysql::Result<()>{
+            let mut conn = self.conn()?;
+            let mut tx = conn.start_transaction(TxOpts::default())?;
+            for i in str.split(";").map(|x| x.trim()){
+                tx.exec_drop(i, ())?;
+            }
+            tx.commit()?;
+            Ok(())            
         }
 
         pub fn import_with_format(&self,table_name: &str,format: &str,raw_data: &str) -> Result<(), Box<dyn std::error::Error>> {

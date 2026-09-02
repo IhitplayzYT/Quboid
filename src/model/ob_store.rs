@@ -17,10 +17,10 @@ pub mod ob_store{
             Self { lake: HashMap::new(), hasher:Box::new(DefaultHasher::new()),root: path.unwrap_or(PathBuf::from("OB_STORE")),rng: Box::new(ThreadRng::default()),blob_sz}
         }
 
-        pub fn add(&mut self,data: String) -> u64{
+        pub fn add(&mut self,data: &String) -> u64{
             let l = data.len();
             let salt = self.rng.next_u64(); 
-            let data = data + &format!("\n{salt}"); // Salt
+            let data = data.to_string() + &format!("\n{salt}"); // Salt
             data.hash(&mut self.hasher);
             let hash = self.hasher.finish();
             let mut pth = format!("{hash:x}");

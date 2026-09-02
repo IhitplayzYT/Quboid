@@ -1,7 +1,8 @@
 pub mod misc{
-    use std::{collections::HashMap, error::Error, fmt::Display, hash::Hash};
+    use std::{collections::HashMap, error::Error, fmt::Display, hash::{DefaultHasher, Hash, Hasher}, ptr::hash};
 
-use mysql::PooledConn;
+use mysql::{Pool, PooledConn};
+use serde::Serialize;
 use uuid::Uuid;
 
 use regex::Regex;
@@ -14,6 +15,7 @@ use regex::Regex;
         High
     }
 
+    #[derive(Serialize)]
     pub struct Maintainer{
        pub name: String,
        pub email: String,
@@ -21,8 +23,18 @@ use regex::Regex;
        pub other: Option<HashMap<String,String>>
     }
 
+    impl Default for Maintainer{
 
-    #[derive()]
+        fn default() -> Self {
+            let mut other = HashMap::new();
+            other.insert("version".to_string(), "1.0.0".to_string());
+            Self { name: "UNKNOWN".to_string(), email: "".to_string(), branch: "main".to_string(), other:Some(other)}
+        }
+
+    }
+
+
+    #[derive(Serialize)]
     pub struct MetaData{
        pub id: Uuid,
        pub gid: Uuid,
@@ -36,6 +48,20 @@ use regex::Regex;
        pub is_maintained: bool,
     }
 
+    impl Default for MetaData{
+
+        fn default() -> Self {
+            let mut ret = Self { id: Uuid::new_v4(), gid: Uuid::new_v4(), ldbid: Uuid::new_v4(), checksum: 0, name: "QuBe".to_string(), desc: "A DataBricks type Object Storage".to_string(), version: "1.0.0".to_string(), is_valid: true, is_maintained: true ,maintainer: Maintainer::default()};
+            let str = serde_json::to_string(&ret).unwrap();
+            let mut hasher = DefaultHasher::new();
+            str.hash(&mut hasher);
+            let hsh = hasher.finish();
+            ret.checksum = hsh;
+            ret
+        }
+
+    }
+
     
 pub enum e_Storage{
     Lake,
@@ -45,12 +71,13 @@ pub enum e_Storage{
 
 type Data = HashMap<String,String>;
 
-type TaskResult = Result<(e_Storage,Data),Box<dyn Error>>;
+pub type TaskResult = Result<(e_Storage,Data),Box<dyn Error>>;
 
 pub trait TaskCruncher{
     fn ingest(&self,tid: Uuid, rule_map: HashMap<String,String>) -> TaskResult;
     fn ingest_all(&self,tids: Vec<Uuid>, rule_maps: HashMap<Uuid,HashMap<String,String>>) -> Vec<TaskResult>;
     fn ingest_batch(&self,tids: &mut Vec<Uuid>, rule_maps: HashMap<Uuid,HashMap<String,String>>) -> Vec<TaskResult>;
+    fn insert(&mut self,id:Uuid,data: String,layer: Option<CacheLayer>,prio: Priority,fmt: Option<String>);
     fn any_pending(&self) -> bool;
     fn is_done(&self) -> bool;
 }
@@ -97,13 +124,40 @@ impl Error for TaskError{
 
 
 pub struct PrioScheduler{
-    batch_size: usize,
-    conn: PooledConn,
-    tasks: HashMap<Uuid,Comm>, 
-    obj_storage_min_size: usize
+   pub batch_size: usize,
+   pub conn: PooledConn,
+   pub tasks: HashMap<Uuid,Comm>, 
+   pub obj_storage_min_size: usize
+}
+
+impl PrioScheduler{
+    pub fn new(batch_size:usize,conn:PooledConn,obj_storage_min_size:usize) -> Self{
+        Self { batch_size, conn, tasks: HashMap::new(), obj_storage_min_size}
+    }
+
+    
+
+}
+
+
+impl From<String> for CacheLayer{
+
+    fn from(value: String) -> Self {
+        match &value[..]{
+            "L1" => {CacheLayer::L1},
+            "L2" => {CacheLayer::L2},
+            "L3" => {CacheLayer::L3},
+            "B4" => {CacheLayer::Below},
+            _ => {CacheLayer::L1}
+        }
+    }
+
 }
 
 impl TaskCruncher for PrioScheduler{
+    fn insert(&mut self,id:Uuid,data: String,layer: Option<CacheLayer>,prio: Priority,fmt: Option<String>){
+        self.tasks.insert(id, Comm { data, cache:layer , prio, fmt });
+    }
 
     fn ingest(&self,tid: Uuid, rule_map: HashMap<String,String>) -> TaskResult {
         let mut data = HashMap::new();
