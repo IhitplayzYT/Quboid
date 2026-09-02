@@ -1,4 +1,4 @@
-use crate::{helper::Helper::CLI, model::cache::cache::CacheConnector};
+use crate::{helper::Helper::CLI, model::{cache::cache::CacheConnector, misc::misc::Priority}};
 
 mod helper;
 mod model;
@@ -6,7 +6,7 @@ mod model;
 
 
 
-use std::collections::VecDeque;
+use std::collections::{BinaryHeap, VecDeque};
 
 use uuid::Uuid;
 
@@ -15,7 +15,7 @@ use crate::model::{dbs::dbs::DataBase, misc::misc::{MetaData, TaskCruncher}, ob_
 
     pub struct Qube{
         pub metadata: Option<MetaData>,
-        task_q: VecDeque<Uuid>,
+        task_q: BinaryHeap<(Priority,Uuid)>,
         task_cr: Box<dyn TaskCruncher>,
         lake: DataLake,
         cacher: Box<dyn CacheConnector>,
