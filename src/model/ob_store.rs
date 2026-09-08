@@ -1,25 +1,23 @@
 pub mod ob_store{
     use std::{collections::HashMap, fs, hash::{DefaultHasher, Hash, Hasher}, path::{Path, PathBuf}};
     use uuid::Uuid;
-    use rand::{Rng, rngs::ThreadRng};
 
 
     pub struct DataLake{
         lake: HashMap<u64,(u64,PathBuf)>, // Salt // Pathbuf to chunk/blob tree
-        hasher: Box<dyn Hasher>,
+        hasher: DefaultHasher,
         root: PathBuf,
-        rng: Box<dyn Rng>,
         blob_sz: usize
     }
 
     impl DataLake{
         pub fn new(blob_sz:usize,path: Option<PathBuf>) -> Self{
-            Self { lake: HashMap::new(), hasher:Box::new(DefaultHasher::new()),root: path.unwrap_or(PathBuf::from("OB_STORE")),rng: Box::new(ThreadRng::default()),blob_sz}
+            Self { lake: HashMap::new(), hasher:DefaultHasher::new(),root: path.unwrap_or(PathBuf::from("OB_STORE")),blob_sz}
         }
 
         pub fn add(&mut self,data: &String) -> u64{
             let l = data.len();
-            let salt = self.rng.next_u64(); 
+            let salt = rand::random::<u64>(); 
             let data = data.to_string() + &format!("\n{salt}"); // Salt
             data.hash(&mut self.hasher);
             let hash = self.hasher.finish();
@@ -33,11 +31,6 @@ pub mod ob_store{
             if l <= self.blob_sz{
                 std::fs::write(fpath,data[..data.rfind("\n").unwrap()].to_string()).unwrap();
             }else{
-                let n = l as f32 / self.blob_sz as f32;
-                let mut m = n as usize;
-                if n - m as f32 > 0.0 {
-                    m += 1;
-                }
                 let root = fpath.parent().unwrap();
                 std::fs::write(&fpath,format!("HEADER CONFIG{l}\n")).unwrap();
                 let mut buff = "".to_string();
@@ -76,11 +69,10 @@ pub mod ob_store{
         }
 
         pub fn is_data_storred(&mut self,data: String) -> bool{
-            for (k,v) in self.lake.iter(){
+            for (_,v) in self.lake.iter(){
                 let hsh_str = format!("{data}\n{}",v.0);
                 hsh_str.hash(&mut self.hasher);
                 let hsh = format!("{:x}",self.hasher.finish());
-                let pth = &v.1;
                 let full_hash = "".to_string() + v.1.parent().unwrap().file_name().unwrap().to_str().unwrap() + v.1.file_name().unwrap().to_str().unwrap();
                 if full_hash == hsh{
                     return true;
@@ -94,7 +86,6 @@ pub mod ob_store{
                 let hsh_str = format!("{data}\n{}",v.0);
                 hsh_str.hash(&mut self.hasher);
                 let hsh = format!("{:x}",self.hasher.finish());
-                let pth = &v.1;
                 let full_hash = "".to_string() + v.1.parent().unwrap().file_name().unwrap().to_str().unwrap() + v.1.file_name().unwrap().to_str().unwrap();
                 if full_hash == hsh{
                     return Some(*k);
@@ -170,7 +161,7 @@ pub mod ob_store{
         }
 
         pub fn delete(&mut self,id: u64){
-            if let Some((slt,pth)) = self.lake.get(&id){
+            if let Some((_,pth)) = self.lake.get(&id){
                 std::fs::remove_dir_all(pth.parent().unwrap()).unwrap();
                 let name = pth.parent().unwrap().file_name().unwrap();
                 std::fs::remove_dir(name).unwrap();

@@ -4,7 +4,7 @@ use reqwest::Client;
 use serde::Serialize;
 
 
-   #[async_trait] 
+   #[async_trait]
 pub trait CacheConnector: Send + Sync{
    async fn insert(&self,k:String,v:String,ttl:Option<usize>);
    async fn delete(&self,k:String);
@@ -13,6 +13,8 @@ pub trait CacheConnector: Send + Sync{
    async fn update(&self,k:String,v:Option<String>,ttl:Option<usize>);
 }
 
+
+#[derive(Debug)]
 pub struct Rustis_Connector{
     base_url: String,
     client: Client

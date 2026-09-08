@@ -1,14 +1,13 @@
-use crate::{helper::Helper::CLI, model::{cache::cache::{CacheConnector, Rustis_Connector}, misc::misc::{CacheLayer, PrioScheduler, Priority, TaskResult, e_Storage}}};
+use crate::{helper::Helper::CLI, model::{cache::cache::{CacheConnector, Rustis_Connector}, misc::misc::{CacheLayer, PrioScheduler, Priority, TaskResult, e_Storage}}, router::router::{FINALISE, BATCH_FINALISE, SUBMIT, SUBMIT_ALL, handle_finalise, handle_batch_finalise, handle_submit, handle_submit_all}};
 
 mod helper;
 mod model;
+mod router;
 
-
-
-
-use std::{collections::{BinaryHeap, HashMap, VecDeque}, path::PathBuf, sync::{LazyLock, RwLock}};
-
-use axum::middleware::MapRequestLayer;
+use std::{collections::{BinaryHeap, HashMap, VecDeque}, path::PathBuf, sync::{Arc, LazyLock}};
+use tokio::sync::RwLock;
+use axum::Router;
+use tokio::net::TcpListener;
 use uuid::Uuid;
 
 use crate::model::{dbs::dbs::DataBase, misc::misc::{MetaData, TaskCruncher}, ob_store::ob_store::DataLake};
@@ -154,8 +153,8 @@ use crate::model::{dbs::dbs::DataBase, misc::misc::{MetaData, TaskCruncher}, ob_
                                             if fmt.is_empty(){
                                                 self.db.exec(&data).unwrap();
                                             }else{
-                                                self.db.import_with_format(&format!("T{}",*TABLE_NAME.read().unwrap()), &fmt, &data).unwrap();
-                                                *TABLE_NAME.write().unwrap() += 1;
+                                                self.db.import_with_format(&format!("T{}",*TABLE_NAME.read().await), &fmt, &data).unwrap();
+                                                *TABLE_NAME.write().await += 1;
                                             }                                               
                                         }
                                     }
@@ -178,8 +177,8 @@ use crate::model::{dbs::dbs::DataBase, misc::misc::{MetaData, TaskCruncher}, ob_
                                 if fmt.is_empty(){
                                     self.db.exec(&data).unwrap();
                                 }else{
-                                    self.db.import_with_format(&format!("T{}",*TABLE_NAME.read().unwrap()), &fmt, &data).unwrap();
-                                    *TABLE_NAME.write().unwrap() += 1;
+                                    self.db.import_with_format(&format!("T{}",*TABLE_NAME.read().await), &fmt, &data).unwrap();
+                                    *TABLE_NAME.write().await += 1;
                                 }   
                             }
                         },
@@ -216,9 +215,28 @@ use crate::model::{dbs::dbs::DataBase, misc::misc::{MetaData, TaskCruncher}, ob_
                 }
             }
  
-
-
         }
+
+        pub async fn Host(self,ip: String,port: u16,root: Option<String>) -> Result<(),Box<dyn std::error::Error>>{
+            self.Serve(ip, port, root).await
+        }
+
+        pub async fn Serve(self,ip: String,port: u16,root: Option<String>) -> Result<(),Box<dyn std::error::Error>>{
+            let tcp = TcpListener::bind(format!("{ip}:{port}")).await?;
+            let qube_ref = Arc::new(RwLock::new(self));
+            let pfx = root.unwrap_or_default();
+            
+            let router = Router::new()
+                .route(&(pfx.clone()+ FINALISE), axum::routing::get(handle_finalise))
+                .route(&(pfx.clone() + BATCH_FINALISE), axum::routing::get(handle_batch_finalise))
+                .route(&(pfx.clone() + SUBMIT), axum::routing::post(handle_submit))
+                .route(&(pfx + SUBMIT_ALL), axum::routing::post(handle_submit_all))
+                .with_state(qube_ref);
+
+            axum::serve(tcp, router).await?;
+            Ok(())
+        }
+
 
         pub async fn finalise(&mut self){
             while let Some((p,v)) = self.task_q.pop(){
@@ -239,20 +257,11 @@ use crate::model::{dbs::dbs::DataBase, misc::misc::{MetaData, TaskCruncher}, ob_
                                 let layer;
                                 let mut cmnd = Vec::new();
                                 match &k[..]{
-                                    "CACHE_LAYER" => {
-                                        layer = CacheLayer::from(v);
-                                    },
-                                    "DATA" => {
-                                        data = v;
-                                    },
-                                    "FORMAT" => {
-                                        fmt = v;
-                                    },
-                                    _ => {
-                                        cmnd.push(v);
-                                    }
+                                    "CACHE_LAYER" => {layer = CacheLayer::from(v);},
+                                    "DATA" => {data = v;},
+                                    "FORMAT" => {fmt = v;},
+                                    _ => {cmnd.push(v);}
                                 }
-
                                 for cmnd_str in cmnd{
                                     match &cmnd_str[..]{
                                         "insert" => {
@@ -270,7 +279,6 @@ use crate::model::{dbs::dbs::DataBase, misc::misc::{MetaData, TaskCruncher}, ob_
                                                 let ed = data[st..].find("\n").unwrap();
                                                 ttl = Some(data[st..ed].parse::<usize>().unwrap());
                                             }
-
                                             self.cacher.insert(key, value, ttl).await;
                                         },
                                         "delete" => {
@@ -316,8 +324,8 @@ use crate::model::{dbs::dbs::DataBase, misc::misc::{MetaData, TaskCruncher}, ob_
                                             if fmt.is_empty(){
                                                 self.db.exec(&data).unwrap();
                                             }else{
-                                                self.db.import_with_format(&format!("T{}",*TABLE_NAME.read().unwrap()), &fmt, &data).unwrap();
-                                                *TABLE_NAME.write().unwrap() += 1;
+                                                self.db.import_with_format(&format!("T{}",*TABLE_NAME.read().await), &fmt, &data).unwrap();
+                                                *TABLE_NAME.write().await += 1;
                                             }                                               
                                         }
                                     }
@@ -329,19 +337,15 @@ use crate::model::{dbs::dbs::DataBase, misc::misc::{MetaData, TaskCruncher}, ob_
                                 let mut data = "".to_string();
                                 let mut fmt = "".to_string();
                                 match &k[..]{
-                                    "DATA" => {
-                                        data = v;
-                                    },
-                                    "FORMAT" => {
-                                        fmt = v;
-                                    }
+                                    "DATA" => {data = v;},
+                                    "FORMAT" => {fmt = v;}
                                     _ => {}
                                 }
                                 if fmt.is_empty(){
                                     self.db.exec(&data).unwrap();
                                 }else{
-                                    self.db.import_with_format(&format!("T{}",*TABLE_NAME.read().unwrap()), &fmt, &data).unwrap();
-                                    *TABLE_NAME.write().unwrap() += 1;
+                                    self.db.import_with_format(&format!("T{}",*TABLE_NAME.read().await), &fmt, &data).unwrap();
+                                    *TABLE_NAME.write().await += 1;
                                 }   
                             }
                         },
@@ -350,12 +354,8 @@ use crate::model::{dbs::dbs::DataBase, misc::misc::{MetaData, TaskCruncher}, ob_
                                 let mut data = "".to_string();
                                 let mut cmnd = Vec::new();
                                 match &k[..]{
-                                    "DATA" => {
-                                        data = v;
-                                    },
-                                    _ => {
-                                        cmnd.push(v);
-                                    }
+                                    "DATA" => {data = v;},
+                                    _ => {cmnd.push(v);}
                                 }
                                 for i in cmnd{
                                     match &(i.to_uppercase())[..]{

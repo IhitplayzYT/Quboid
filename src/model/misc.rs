@@ -1,13 +1,13 @@
 pub mod misc{
     use std::{collections::HashMap, error::Error, fmt::Display, hash::{DefaultHasher, Hash, Hasher}, ptr::hash};
 
-use mysql::{Pool, PooledConn};
-use serde::Serialize;
+use mysql::PooledConn;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use regex::Regex;
 
-    #[derive(Debug,Clone,Copy,PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug,Clone,Copy,PartialEq, Eq, PartialOrd, Ord,Serialize,Deserialize)]
     pub enum Priority{
         Low,
         Default,
@@ -15,7 +15,7 @@ use regex::Regex;
         High
     }
 
-    #[derive(Serialize)]
+    #[derive(Serialize,Debug,Clone)]
     pub struct Maintainer{
        pub name: String,
        pub email: String,
@@ -34,7 +34,7 @@ use regex::Regex;
     }
 
 
-    #[derive(Serialize)]
+    #[derive(Serialize,Debug,Clone)]
     pub struct MetaData{
        pub id: Uuid,
        pub gid: Uuid,
@@ -63,6 +63,7 @@ use regex::Regex;
     }
 
     
+#[derive(Debug,Clone)]
 pub enum e_Storage{
     Lake,
     Cache,
@@ -71,9 +72,9 @@ pub enum e_Storage{
 
 type Data = HashMap<String,String>;
 
-pub type TaskResult = Result<(e_Storage,Data),Box<dyn Error>>;
+pub type TaskResult = Result<(e_Storage,Data),Box<dyn Error + Send + Sync>>;
 
-pub trait TaskCruncher{
+pub trait TaskCruncher: Send + Sync{
     fn ingest(&self,tid: Uuid, rule_map: HashMap<String,String>) -> TaskResult;
     fn ingest_all(&self,tids: Vec<Uuid>, rule_maps: HashMap<Uuid,HashMap<String,String>>) -> Vec<TaskResult>;
     fn ingest_batch(&self,tids: &mut Vec<Uuid>, rule_maps: HashMap<Uuid,HashMap<String,String>>) -> Vec<TaskResult>;
@@ -100,6 +101,9 @@ pub struct Comm{
 struct TaskError{
     info: String
 }
+
+unsafe impl Send for TaskError {}
+unsafe impl Sync for TaskError {}
 
 impl Display for TaskError{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
