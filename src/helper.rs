@@ -3,7 +3,24 @@ pub mod Helper{
 
 
 
-    const DBG_STR: &str = "";
+    const DBG_STR: &str = "Quboid - Multi-tier Data Management System
+
+USAGE:
+    quboid [OPTIONS]
+
+OPTIONS:
+    -d, --debug          Enable debug mode
+    -h, --help           Display this help message
+
+DESCRIPTION:
+    Quboid is a high-performance data management system that provides intelligent
+    storage routing across cache, database, and object storage layers.
+
+EXAMPLES:
+    quboid -d             Run with debug mode enabled
+    quboid -h             Show this help message
+
+For more information, visit the project repository.";
     const OK:i32 = 0;
     const ERR:i32 = -1;
 
